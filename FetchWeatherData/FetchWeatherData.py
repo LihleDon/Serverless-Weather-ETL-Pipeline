@@ -10,8 +10,8 @@ s3 = boto3.client('s3')
 
 def lambda_handler(event, context):
     # API key and city for weather data
-    api_key = 'YOUR_API_KEY_HERE'  # Replace with your OpenWeatherMap API key
-    city = 'Tokyo'  # Example city; can be parameterized later
+    api_key = '61bad0c51d57d5701d92c7caf45ab92b'
+    city = 'Tokyo'
     url = f'http://api.openweathermap.org/data/2.5/weather?q={city}&appid={api_key}&units=metric'
 
     # Fetch weather data
