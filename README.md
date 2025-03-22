@@ -1,83 +1,61 @@
 # Serverless Weather ETL Pipeline
 
-A serverless Extract, Transform, Load (ETL) pipeline built using AWS Serverless Application Model (SAM). It fetches daily weather data for Tokyo from the OpenWeatherMap API, stores it as a CSV in Amazon S3, and loads it into Amazon DynamoDB. The pipeline runs automatically every day via a CloudWatch Events rule.
+This project is a serverless Extract, Transform, Load (ETL) pipeline built using AWS Serverless Application Model (SAM). It fetches daily weather data for Tokyo from the OpenWeatherMap API, stores it as a CSV file in Amazon S3, and loads the data into Amazon DynamoDB. The pipeline is triggered daily using a CloudWatch Events rule and orchestrated by AWS Step Functions. The stack was successfully tested on March 22, 2025, and then deleted to avoid costs.
 
-## Architecture
-- **AWS CloudWatch Events**: Triggers the pipeline daily using a scheduled rule (`rate(1 day)`).
-- **AWS Step Functions**: Orchestrates the workflow with two states:
-  - **FetchWeatherData**: A Lambda function that retrieves weather data (temperature and humidity) for Tokyo, saves it as a CSV in S3, and passes the file location to the next step.
-  - **LoadToDynamoDB**: A Lambda function that reads the CSV from S3 and writes the data to DynamoDB.
-- **Amazon S3**: Stores raw weather data as CSV files (e.g., `lihle-weather-data-bucket-2025/raw/YYYY-MM-DD/Tokyo_weather.csv`).
-- **Amazon DynamoDB**: Stores processed weather records in a table named `WeatherRecords` with a composite key (`city` and `date`).
+## Project Architecture
 
-## Prerequisites
-- **AWS Account**: Configured with AWS CLI (`aws configure`).
-- **AWS SAM CLI**: Installed (see [AWS SAM CLI Installation](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html)).
-- **OpenWeatherMap API Key**: Sign up at [OpenWeatherMap](https://openweathermap.org/), generate an API key, and add it to `FetchWeatherData/FetchWeatherData.py`.
-- **Git**: Installed to clone the repository.
+- **AWS CloudWatch Events**: Triggers the pipeline daily with a `rate(1 day)` schedule.
+- **AWS Step Functions**: Orchestrates two Lambda functions:
+  - **FetchWeatherData**: Queries the OpenWeatherMap API for Tokyo’s weather (temperature and humidity), saves it as a CSV in S3, and passes the file location to the next step.
+  - **LoadToDynamoDB**: Reads the CSV from S3 and loads the data into DynamoDB.
+- **Amazon S3**: Stores raw CSV files (e.g., `lihle-weather-data-bucket-2025/raw/YYYY-MM-DD/Tokyo_weather.csv`).
+- **Amazon DynamoDB**: Stores processed weather data in the `WeatherRecords` table with a composite key (`city` and `date`).
+
 
 ## Project Structure
 
+
 ├── FetchWeatherData/
-│   ├── FetchWeatherData.py    # Lambda function to fetch weather data and save to S3
+│   ├── FetchWeatherData.py    # Fetches and saves weather data
 │   └── requirements.txt       # Dependencies: requests, pandas
 ├── LoadToDynamoDB/
-│   ├── LoadToDynamoDB.py      # Lambda function to load CSV data into DynamoDB
+│   ├── LoadToDynamoDB.py      # Loads data into DynamoDB
 │   └── requirements.txt       # Dependency: pandas
-├── template.yaml              # SAM template defining all AWS resources
+├── template.yaml              # SAM template defining AWS resources
 └── README.md                  # This documentation file
 
 
-## Setup Instructions
+## Screenshots and Results
 
-1. **Clone the Repository**:
-2. **Insert Your API Key**:
-- Open the `FetchWeatherData.py` file:
-  ```
-  code FetchWeatherData/FetchWeatherData.py
-  ```
-- Find the line `api_key = "your_actual_api_key_here"`.
-- Replace `"your_actual_api_key_here"` with your OpenWeatherMap API key (e.g., `api_key = "abc123def456ghi789"`).
-- Save and close the file.
-3. **Build the Application**:
-- This command installs the dependencies listed in `requirements.txt` files and prepares the deployment package.
-4. **Deploy to AWS**:
-- Follow the interactive prompts:
-  - **Stack Name**: Enter `WeatherETLPipeline`.
-  - **Region**: Enter `af-south-1`.
-  - **Confirm Changeset**: Type `y` to approve the changes.
-  - **Capabilities**: Accept `CAPABILITY_IAM` for IAM role creation.
-- Wait until you see “Successfully created/updated stack - WeatherETLPipeline in af-south-1”.
+The pipeline was tested successfully before deletion. Below are key visuals and execution details from the test run:
 
-## Running the Pipeline
+- **Step Functions Execution**: Shows the successful run of both steps in the pipeline.
+  ![Step Functions Execution](screenshots/step-functions-execution.png)
+- **Step Functions Output**: Confirms one record was processed successfully.
+  ![Step Functions Output](screenshots/step-functions-output.png)
+- **S3 Bucket**: Displays the stored CSV file from FetchWeatherData.
+  ![S3 Bucket](screenshots/s3-bucket.png)
 
-- **Manual Trigger**:
-  - Open the AWS Console, navigate to Step Functions in the `af-south-1` region.
-  - Find `WeatherETLStateMachine-2pV7SlFD7TSW`, click “Start Execution.”
-  - In the input box, leave it as `{}` (default), and click “Start Execution.”
-- **Automatic Trigger**: The pipeline runs daily at a fixed time, managed by the CloudWatch Events rule.
-- **Verify Output**:
-  - **S3**: Check the bucket `lihle-weather-data-bucket-2025` for a file like `raw/YYYY-MM-DD/Tokyo_weather.csv`.
-  - **DynamoDB**: Open the `WeatherRecords` table and look for an entry (e.g., `city: Tokyo, date: YYYY-MM-DD, temperature: 15.0, humidity: 70`).
-
-## Troubleshooting
-
-- **View Logs**: Check CloudWatch Logs in the `af-south-1` region:
-  - `/aws/lambda/WeatherETLPipeline-FetchWeatherDataFunction-<random>` for API fetch issues.
-  - `/aws/lambda/WeatherETLPipeline-LoadToDynamoDBFunction-<random>` for DynamoDB load issues.
-- **Common Problems**:
-  - **Invalid API Key**: If the API call fails, update the key in `FetchWeatherData.py` and redeploy.
-  - **Missing Dependencies**: Ensure `requirements.txt` files exist in both `FetchWeatherData/` and `LoadToDynamoDB/`.
-
-## Cleanup
-
-To remove all AWS resources and avoid charges:
-aws cloudformation delete-stack --stack-name WeatherETLPipeline --region af-south-1
-aws cloudformation wait stack-delete-complete --stack-name WeatherETLPipeline --region af-south-1
-
-
-## Future Enhancements
-
-- Parameterize the city name to fetch data for multiple locations.
-- Include additional weather metrics like wind speed or pressure.
-- Add error handling with Amazon SNS notifications for failures.
+### Execution Details
+- **State Machine Definition**: Defines the workflow executed during testing.
+  ```json
+  {
+    "StartAt": "FetchWeatherData",
+    "States": {
+      "FetchWeatherData": {
+        "Next": "LoadToDynamoDB",
+        "Resource": "arn:aws:lambda:af-south-1:203918881738:function:WeatherETLPipeline-FetchWeatherDataFunction-VvOwMS7aZkZB",
+        "ResultPath": "$.fetchResult",
+        "Type": "Task"
+      },
+      "LoadToDynamoDB": {
+        "End": true,
+        "Parameters": {
+          "bucket.$": "$.fetchResult.bucket",
+          "key.$": "$.fetchResult.key"
+        },
+        "Resource": "arn:aws:lambda:af-south-1:203918881738:function:WeatherETLPipeline-LoadToDynamoDBFunction-4nE9DPdPbkni",
+        "Type": "Task"
+      }
+    }
+  }
