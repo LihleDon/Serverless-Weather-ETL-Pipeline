@@ -1,38 +1,37 @@
-import json
 import boto3
-import csv
+import pandas as pd
+from decimal import Decimal
 import io
 
-# Initialize AWS clients
-s3 = boto3.client('s3')
 dynamodb = boto3.resource('dynamodb')
+s3_client = boto3.client('s3')
 
 def lambda_handler(event, context):
-    # Get S3 details from the previous step (FetchWeatherData)
-    body = json.loads(event['body'])
-    bucket = body['bucket']
-    key = body['key']
+    bucket = event['bucket']
+    key = event['key']
 
-    # Read CSV from S3
-    response = s3.get_object(Bucket=bucket, Key=key)
-    csv_data = response['Body'].read().decode('utf-8')
-    csv_reader = csv.DictReader(io.StringIO(csv_data))
+    # Download the CSV file from S3
+    response = s3_client.get_object(Bucket=bucket, Key=key)
+    csv_content = response['Body'].read().decode('utf-8')
 
-    # Load into DynamoDB
+    # Parse CSV content with pandas using io.StringIO
+    df = pd.read_csv(io.StringIO(csv_content))
+
+    # Get DynamoDB table
     table = dynamodb.Table('WeatherRecords')
-    for row in csv_reader:
-        table.put_item(
-            Item={
+
+    # Write each row to DynamoDB, converting floats to Decimal
+    with table.batch_writer() as batch:
+        for index, row in df.iterrows():
+            item = {
                 'city': row['city'],
                 'date': row['date'],
-                'temperature_celsius': float(row['temperature_celsius']),
-                'humidity_percent': int(row['humidity_percent']),
-                'description': row['description']
+                'temperature': Decimal(str(row['temperature'])),
+                'humidity': Decimal(str(row['humidity']))
             }
-        )
+            batch.put_item(Item=item)
 
-    # Return success
     return {
         'statusCode': 200,
-        'body': json.dumps({'message': 'Data loaded into DynamoDB'})
+        'body': f'Successfully loaded {len(df)} records into DynamoDB'
     }
