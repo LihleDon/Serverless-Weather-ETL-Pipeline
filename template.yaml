@@ -3,13 +3,11 @@ Transform: AWS::Serverless-2016-10-31
 Description: Serverless Weather Data ETL Pipeline
 
 Resources:
-  # S3 Bucket for raw and transformed data
   WeatherDataBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: weather-data-bucket
+      BucketName: lihle-weather-data-bucket-2025
 
-  # DynamoDB Table for processed weather records
   WeatherTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -26,7 +24,6 @@ Resources:
           KeyType: RANGE
       BillingMode: PAY_PER_REQUEST
 
-  # FetchWeatherData Lambda Function
   FetchWeatherDataFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -36,9 +33,8 @@ Resources:
       CodeUri: FetchWeatherData/
       Policies:
         - S3CrudPolicy:
-            BucketName: weather-data-bucket
+            BucketName: lihle-weather-data-bucket-2025
 
-  # LoadToDynamoDB Lambda Function (placeholder for now)
   LoadToDynamoDBFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -48,11 +44,32 @@ Resources:
       CodeUri: LoadToDynamoDB/
       Policies:
         - S3CrudPolicy:
-            BucketName: weather-data-bucket
+            BucketName: lihle-weather-data-bucket-2025
         - DynamoDBCrudPolicy:
             TableName: !Ref WeatherTable
 
-  # Step Functions State Machine
+  WeatherETLStateMachineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: LambdaInvokePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource:
+                  - !GetAtt FetchWeatherDataFunction.Arn
+                  - !GetAtt LoadToDynamoDBFunction.Arn
+
   WeatherETLStateMachine:
     Type: AWS::Serverless::StateMachine
     Properties:
@@ -67,13 +84,28 @@ Resources:
             Type: Task
             Resource: !GetAtt LoadToDynamoDBFunction.Arn
             End: true
-      Policies:
-        - LambdaInvokePolicy:
-            FunctionName: !Ref FetchWeatherDataFunction
-        - LambdaInvokePolicy:
-            FunctionName: !Ref LoadToDynamoDBFunction
+      Role: !GetAtt WeatherETLStateMachineRole.Arn
 
-  # CloudWatch Event Rule to trigger daily
+  DailyTriggerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: StepFunctionsTriggerPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - states:StartExecution
+                Resource: !GetAtt WeatherETLStateMachine.Arn
+
   DailyTrigger:
     Type: AWS::Events::Rule
     Properties:
@@ -81,15 +113,7 @@ Resources:
       Targets:
         - Arn: !GetAtt WeatherETLStateMachine.Arn
           Id: WeatherETLStateMachineTarget
-
-  # Permission for CloudWatch to invoke Step Functions
-  StepFunctionInvokePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !GetAtt WeatherETLStateMachine.Arn
-      Action: states:StartExecution
-      Principal: events.amazonaws.com
-      SourceArn: !GetAtt DailyTrigger.Arn
+          RoleArn: !GetAtt DailyTriggerRole.Arn
 
 Outputs:
   WeatherDataBucketName:

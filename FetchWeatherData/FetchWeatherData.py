@@ -34,7 +34,7 @@ def lambda_handler(event, context):
     output.close()
 
     # Upload to S3
-    bucket_name = 'weather-data-bucket'
+    bucket_name = 'lihle-weather-data-bucket-2025'
     file_key = f'raw/{date}/{city}_weather.csv'
     s3.put_object(Bucket=bucket_name, Key=file_key, Body=csv_data)
 
